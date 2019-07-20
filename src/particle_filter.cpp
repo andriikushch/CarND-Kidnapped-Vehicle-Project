@@ -105,7 +105,19 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    *   probably find it useful to implement this method and use it as a helper 
    *   during the updateWeights phase.
    */
+  for(LandmarkObs p: predicted) {
+    double minDistance = -1;
+    double currentDistance = -1;
 
+    for (LandmarkObs o: observations) {
+      currentDistance = dist(p.x, p.y, o.x, o.y);
+
+      if (minDistance == -1 || currentDistance < minDistance) {
+        minDistance = currentDistance;
+        o.id = p.id;
+      }
+    }
+  }
 }
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], 
@@ -125,6 +137,69 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
 
+  double weight_normalizer = 0.0;
+
+  for (int i = 0; i < num_particles; ++i) {
+    double particle_x = particles[i].x;
+    double particle_y = particles[i].y;
+    double particle_theta = particles[i].theta;
+
+    // transform observation coordinates from car coordinates to the map coordinates
+    vector<LandmarkObs> transformed_observations;
+
+    for (const auto & observation : observations) {
+      LandmarkObs transformed_obs;
+      transformed_obs.id = observation.id;
+      transformed_obs.x = particle_x + (cos(particle_theta) * observation.x) - (sin(particle_theta) * observation.y);
+      transformed_obs.y = particle_y + (sin(particle_theta) * observation.x) + (cos(particle_theta) * observation.y);
+      transformed_observations.push_back(transformed_obs);
+    }
+
+    // consider only observation in the range of the sensor
+    vector<LandmarkObs> predicted_landmarks;
+    for (auto current_landmark : map_landmarks.landmark_list) {
+      if (dist(particle_x, particle_y, current_landmark.x_f, current_landmark.y_f) <= sensor_range)) {
+        predicted_landmarks.push_back(LandmarkObs {current_landmark.id_i, current_landmark.x_f, current_landmark.y_f});
+      }
+    }
+
+    dataAssociation(predicted_landmarks, transformed_observations);
+
+    for (int k = 0; k < transformed_observations.size(); ++k) {
+      double sig_x, sig_y;
+      sig_x = std_landmark[0];
+      sig_y = std_landmark[1];
+
+      double gauss_norm = 1 / (2 * M_PI * sig_x * sig_y);
+      // calculate exponent
+      double exponent;
+      double x_tr_obs, y_tr_obs, mu_x, mu_y;
+      x_tr_obs = transformed_observations[k].x;
+      y_tr_obs = transformed_observations[k].y;
+
+      for (int l = 0; l < map_landmarks.landmark_list.size(); l++) {
+        if(map_landmarks.landmark_list[l].id_i == transformed_observations[k].id) {
+          mu_x = predicted_landmarks[l].x;
+          mu_y = predicted_landmarks[l].y;
+
+          exponent = (pow(x_tr_obs - mu_x, 2) / (2 * pow(sig_x, 2)))
+                     + (pow(y_tr_obs - mu_y, 2) / (2 * pow(sig_y, 2)));
+
+          particles[i].weight *= gauss_norm * exp(-exponent);
+        }
+      }
+
+      // calculate weight using normalization terms and exponent
+      weights[k] = gauss_norm * exp(-exponent);
+    }
+
+    weight_normalizer += particles[i].weight;
+  }
+
+  for (int i = 0; i < particles.size(); i++) {
+    particles[i].weight /= weight_normalizer;
+    weights[i] = particles[i].weight;
+  }
 }
 
 void ParticleFilter::resample() {
