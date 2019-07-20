@@ -158,7 +158,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     // consider only observation in the range of the sensor
     vector<LandmarkObs> predicted_landmarks;
     for (auto current_landmark : map_landmarks.landmark_list) {
-      if (dist(particle_x, particle_y, current_landmark.x_f, current_landmark.y_f) <= sensor_range)) {
+      if (dist(particle_x, particle_y, current_landmark.x_f, current_landmark.y_f) <= sensor_range) {
         predicted_landmarks.push_back(LandmarkObs {current_landmark.id_i, current_landmark.x_f, current_landmark.y_f});
       }
     }
